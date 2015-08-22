@@ -192,6 +192,7 @@ namespace MuMech
 
         void RegisterInfoItems(object obj)
         {
+            RemotableContainer.Register(obj, vessel.rootPart.flightID.ToString());
             foreach (MemberInfo member in obj.GetType().GetMembers(BindingFlags.GetField | BindingFlags.GetProperty | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy))
             {
                 foreach (Attribute attribute in member.GetCustomAttributes(true))
@@ -201,6 +202,9 @@ namespace MuMech
                     else if (attribute is ToggleInfoItemAttribute) registry.Add(new ToggleInfoItem(obj, member, (ToggleInfoItemAttribute)attribute));
                     else if (attribute is GeneralInfoItemAttribute) registry.Add(new GeneralInfoItem(obj, (MethodInfo)member, (GeneralInfoItemAttribute)attribute));
                     else if (attribute is EditableInfoItemAttribute) registry.Add(new EditableInfoItem(obj, member, (EditableInfoItemAttribute)attribute));
+                    
+					if (attribute is ValueInfoItemAttribute)
+						RemotableContainer.ManualRegisterMember(obj.GetType(), member, (attribute as ValueInfoItemAttribute).name);
                 }
             }
         }
