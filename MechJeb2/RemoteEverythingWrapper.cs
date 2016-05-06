@@ -28,14 +28,21 @@ namespace MuMech
 
 		static object FindRealContainer()
 		{
-			try 
+			try
 			{
 				foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
 				{
-					foreach (var t in a.GetExportedTypes())
+					try
 					{
-						if (t.FullName == "RemoteEverything.RemotableContainer")
-							return t.GetProperty("Instance").GetValue(null, null);
+						foreach (var t in a.GetExportedTypes())
+						{
+							if (t.FullName == "RemoteEverything.RemotableContainer")
+								return t.GetProperty("Instance").GetValue(null, null);
+						}
+					}
+					catch (Exception e)
+					{
+						Debug.LogException(e);
 					}
 				}
 			}
