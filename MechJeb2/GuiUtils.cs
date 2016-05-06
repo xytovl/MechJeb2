@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -162,11 +159,11 @@ namespace MuMech
         public void DrawEditGUI(Direction direction)
         {
             GUILayout.BeginHorizontal();
-            degrees.text = GUILayout.TextField(degrees.text, GUILayout.Width(35));
+            degrees.text = GUILayout.TextField(degrees.text, GUILayout.Width(30));
             GUILayout.Label("°", GUILayout.ExpandWidth(false));
-            minutes.text = GUILayout.TextField(minutes.text, GUILayout.Width(35));
+            minutes.text = GUILayout.TextField(minutes.text, GUILayout.Width(30));
             GUILayout.Label("'", GUILayout.ExpandWidth(false));
-            seconds.text = GUILayout.TextField(seconds.text, GUILayout.Width(35));
+            seconds.text = GUILayout.TextField(seconds.text, GUILayout.Width(30));
             GUILayout.Label("\"", GUILayout.ExpandWidth(false));
             String dirString = (direction == Direction.NS ? (negative ? "S" : "N") : (negative ? "W" : "E"));
             if (GUILayout.Button(dirString, GUILayout.Width(25))) negative = !negative;
@@ -241,6 +238,22 @@ namespace MuMech
                     _yellowOnHover.hover.background = t;
                 }
                 return _yellowOnHover;
+            }
+        }
+
+        static GUIStyle _labelNoWrap;
+        public static GUIStyle LabelNoWrap
+        {
+            get
+            {
+                if (_labelNoWrap == null)
+                {
+                    _labelNoWrap = new GUIStyle(GUI.skin.label)
+                    {
+                        wordWrap = false,
+                    };
+                }
+                return _labelNoWrap;
             }
         }
 

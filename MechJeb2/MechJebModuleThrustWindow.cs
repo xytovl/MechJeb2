@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace MuMech
 {
@@ -52,13 +48,13 @@ namespace MuMech
         {
             GUILayout.BeginVertical();
 
-            //core.thrust.limitToTerminalVelocity = GUILayout.Toggle(core.thrust.limitToTerminalVelocity, "Limit to terminal velocity");
-            core.thrust.LimitToTerminalVelocityInfoItem();
+            //core.thrust.LimitToTerminalVelocityInfoItem();
             core.thrust.LimitToMaxDynamicPressureInfoItem();
             core.thrust.LimitToPreventOverheatsInfoItem();
             core.thrust.LimitAccelerationInfoItem();
             core.thrust.LimitThrottleInfoItem();
             core.thrust.LimiterMinThrottleInfoItem();
+            core.thrust.LimitElectricInfoItem();
             core.thrust.LimitToPreventFlameoutInfoItem();
             core.thrust.smoothThrottle = GUILayout.Toggle(core.thrust.smoothThrottle, "Smooth throttle");
             core.thrust.manageIntakes = GUILayout.Toggle(core.thrust.manageIntakes, "Manage air intakes");

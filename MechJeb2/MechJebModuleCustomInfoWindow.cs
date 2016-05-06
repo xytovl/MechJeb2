@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
 using System.Reflection;
 using UnityEngine;
 
@@ -145,10 +144,45 @@ namespace MuMech
 
                 ConfigNode.LoadObjectFromConfig(window, windowNode);
 
-                if (windowNode.HasValue("enabled"))
+                bool useOldConfig = true;
+                if (windowNode.HasValue("enabledEditor"))
                 {
                     bool loadedEnabled;
-                    if (bool.TryParse(windowNode.GetValue("enabled"), out loadedEnabled)) window.enabled = loadedEnabled;
+                    if (bool.TryParse(windowNode.GetValue("enabledEditor"), out loadedEnabled))
+                    {
+                        window.enabledEditor = loadedEnabled;
+                        useOldConfig = false;
+                        if (HighLogic.LoadedSceneIsEditor)
+                            window.enabled = loadedEnabled;
+                    }
+                }
+
+                if (windowNode.HasValue("enabledFlight"))
+                {
+                    bool loadedEnabled;
+                    if (bool.TryParse(windowNode.GetValue("enabledFlight"), out loadedEnabled))
+                    {
+                        window.enabledFlight = loadedEnabled;
+                        useOldConfig = false;
+                        if (HighLogic.LoadedSceneIsFlight)
+                            window.enabled = loadedEnabled;
+                    }
+                }
+
+                if (useOldConfig)
+                {
+                    if (windowNode.HasValue("enabled"))
+                    {
+                        bool loadedEnabled;
+                        if (bool.TryParse(windowNode.GetValue("enabled"), out loadedEnabled))
+                        {
+                            window.enabled = loadedEnabled;
+                            window.enabledEditor = window.enabled;
+                            window.enabledFlight = window.enabled;
+                        }
+                    }
+                    window.enabledEditor = window.enabled;
+                    window.enabledFlight = window.enabled;
                 }
 
                 window.items = new List<InfoItem>();
@@ -180,7 +214,14 @@ namespace MuMech
             {
                 string name = typeof(MechJebModuleCustomInfoWindow).Name;
                 ConfigNode windowNode = ConfigNode.CreateConfigFromObject(window, (int)Pass.Global, null);
-                windowNode.AddValue("enabled", window.enabled);
+
+                if (HighLogic.LoadedSceneIsEditor)
+                    window.enabledEditor = window.enabled;
+                if (HighLogic.LoadedSceneIsFlight)
+                    window.enabledFlight = window.enabled;
+
+                windowNode.AddValue("enabledFlight", window.enabledFlight);
+                windowNode.AddValue("enabledEditor", window.enabledEditor);
                 windowNode.CopyTo(global.AddNode(name));
             }
         }
@@ -247,7 +288,7 @@ namespace MuMech
 
             if (editedWindow != null)
             {
-                List<MechJebModuleCustomInfoWindow> allWindows = core.GetComputerModules<MechJebModuleCustomInfoWindow>().ToList();
+                List<ComputerModule> allWindows = core.GetComputerModules<MechJebModuleCustomInfoWindow>();
 
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Title:", GUILayout.ExpandWidth(false));
@@ -256,7 +297,7 @@ namespace MuMech
                     {
                         editedWindow.title = GUILayout.TextField(editedWindow.title, GUILayout.Width(120), GUILayout.ExpandWidth(false));
                     });
-                editedWindow = allWindows[editedWindowIndex];
+                editedWindow = (MechJebModuleCustomInfoWindow)allWindows[editedWindowIndex];
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();

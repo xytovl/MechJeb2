@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace MuMech
@@ -35,20 +34,50 @@ namespace MuMech
             return new GUILayoutOption[] { GUILayout.Width(200), GUILayout.Height(150) };
         }
 
+        private void moveByMeter(ref EditableAngle angle, double distance, double Alt)
+        {
+            double angularDelta = distance * 180d / (Math.PI * (Alt + mainBody.Radius));
+            angle += angularDelta;
+        }
+
         protected override void WindowGUI(int windowID)
         {
             GUILayout.BeginVertical();
 
             if (core.target.PositionTargetExists)
             {
+                var ASL = core.vessel.mainBody.TerrainAltitude(core.target.targetLatitude, core.target.targetLongitude);
                 GUILayout.Label("Target coordinates:");
 
+                GUILayout.BeginHorizontal();
                 core.target.targetLatitude.DrawEditGUI(EditableAngle.Direction.NS);
+                if (GUILayout.Button("▲"))
+                {
+                    moveByMeter(ref core.target.targetLatitude, 10, ASL);
+                }
+                GUILayout.Label("10m");
+                if (GUILayout.Button("▼"))
+                {
+                    moveByMeter(ref core.target.targetLatitude, -10, ASL);
+                }
+                GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
                 core.target.targetLongitude.DrawEditGUI(EditableAngle.Direction.EW);
+                if (GUILayout.Button("◄"))
+                {
+                    moveByMeter(ref core.target.targetLongitude, -10, ASL);
+                }
+                GUILayout.Label("10m");
+                if (GUILayout.Button("►"))
+                {
+                    moveByMeter(ref core.target.targetLongitude, 10, ASL);
+                }
+                GUILayout.EndHorizontal();
 
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("ASL: " + MuUtils.ToSI(ASL, -1, 4) + "m");
                 GUILayout.Label(ScienceUtil.GetExperimentBiome(core.target.targetBody, core.target.targetLatitude, core.target.targetLongitude));
-                // Display the ASL of the taget location
-                GUILayout.Label("Target ASL: " + MuUtils.ToSI(core.vessel.mainBody.TerrainAltitude(core.target.targetLatitude, core.target.targetLongitude), -1, 4) + "m");
+                GUILayout.EndHorizontal();
             }
             else
             {
@@ -78,6 +107,9 @@ namespace MuMech
             {
                 GUILayout.Label("Autopilot:");
 
+                predictor.maxOrbits = core.landing.enabled ? 0.5 : 4;
+                predictor.noSkipToFreefall = !core.landing.enabled;
+
                 if (core.landing.enabled)
                 {
                     if (GUILayout.Button("Abort autoland")) core.landing.StopLanding();
@@ -85,14 +117,19 @@ namespace MuMech
                 else
                 {
                     GUILayout.BeginHorizontal();
-                    if (!core.target.PositionTargetExists) GUI.enabled = false;
+                    if (!core.target.PositionTargetExists || vessel.LandedOrSplashed) GUI.enabled = false;
                     if (GUILayout.Button("Land at target")) core.landing.LandAtPositionTarget(this);
-                    GUI.enabled = true;
+                    GUI.enabled = !vessel.LandedOrSplashed;
                     if (GUILayout.Button("Land somewhere")) core.landing.LandUntargeted(this);
+                    GUI.enabled = true;
                     GUILayout.EndHorizontal();
                 }
 
                 GuiUtils.SimpleTextBox("Touchdown speed:", core.landing.touchdownSpeed, "m/s", 35);
+                    GuiUtils.SimpleTextBox("minThrust:", core.landing.minThrust, "frac", 35);
+                    GuiUtils.SimpleTextBox("decelerationEndAltitude:", core.landing.decelerationEndAltitude, "m", 35);
+                    GuiUtils.SimpleTextBox("safityThrustLimit(prediction):", core.landing.safityThrustLimit, "frac", 35);
+                    GuiUtils.SimpleTextBox("CorrectionBeforeDeceleration:", core.landing.CorrectionBeforeDeceleration, "m", 35);
 
                 if (core.landing != null) core.node.autowarp = GUILayout.Toggle(core.node.autowarp, "Auto-warp");
 
@@ -104,26 +141,36 @@ namespace MuMech
                 predictor.limitChutesStage = core.landing.limitChutesStage;
                 core.landing.rcsAdjustment = GUILayout.Toggle(core.landing.rcsAdjustment, "Use RCS for small adjustment");
 
-                if (core.landing.enabled)
+
+                if (core.landing.enabled && core.landing.descentSpeedPolicy != null)
                 {
                     GUILayout.Label("Status: " + core.landing.status);
                     GUILayout.Label("Mode " + core.landing.descentSpeedPolicy.GetType().Name + "(" + core.landing.UseAtmosphereToBrake().ToString() + ")");
                     GUILayout.Label("DecEndAlt: " + core.landing.DecelerationEndAltitude().ToString("F2"));
                     var dragLength = mainBody.DragLength(core.landing.LandingAltitude, core.landing.vesselAverageDrag, vesselState.mass);
-                    GUILayout.Label("Drag Leng: " + ( dragLength != Double.MaxValue ? dragLength.ToString("F2") : "infinite"));
+                    GUILayout.Label("Drag Leng: " + (dragLength != Double.MaxValue ? dragLength.ToString("F2") : "infinite"));
 
-                    string parachuteInfo = core.landing.ParachuteControlInfo;
+                    string parachuteInfo = core.landing.ParachuteControlInfo();
                     if (null != parachuteInfo)
                     {
                         GUILayout.Label(parachuteInfo);
                     }
                 }
+                else if (core.landing.CorrectionDv.sqrMagnitude > 1)
+                    if (GUILayout.Button("Place Correction"))
+                    {
+                        Vector3d nodeDV = orbit.DeltaVToManeuverNodeCoordinates(vesselState.time + 30, core.landing.CorrectionDv);
+                        ManeuverNode mn = vessel.patchedConicSolver.AddManeuverNode(vesselState.time + 30);
+                        mn.OnGizmoUpdated(nodeDV, vesselState.time + 30);
+                    }
             }
 
             GUILayout.EndVertical();
 
             base.WindowGUI(windowID);
         }
+        bool predictorUsesDescPolicy = false;
+
 
         [GeneralInfoItem("Landing predictions", InfoItem.Category.Misc)]
         void DrawGUITogglePredictions()
@@ -140,14 +187,24 @@ namespace MuMech
                 else
                 {
                     predictor.users.Remove(this);
+                    if (!core.landing.active)
+                        predictor.descentSpeedPolicy = null;
                 }
             }
+
+            predictorUsesDescPolicy = GUILayout.Toggle(predictorUsesDescPolicy, "Show predictions with DescentPolicy");
 
             if (predictor.enabled)
             {
                 predictor.makeAerobrakeNodes = GUILayout.Toggle(predictor.makeAerobrakeNodes, "Show aerobrake nodes");
                 predictor.showTrajectory = GUILayout.Toggle(predictor.showTrajectory, "Show trajectory");
                 predictor.worldTrajectory = GUILayout.Toggle(predictor.worldTrajectory, "World trajectory");
+                predictor.camTrajectory = GUILayout.Toggle(predictor.camTrajectory, "Camera trajectory (WIP)");
+                if (predictorUsesDescPolicy && core.landing != null)
+                {
+                    core.landing.PatchPredictorPolicy();
+                    //predictor.users.Add
+                }
                 DrawGUIPrediction();
             }
 
@@ -156,7 +213,7 @@ namespace MuMech
         
         void DrawGUIPrediction()
         {
-            ReentrySimulation.Result result = predictor.GetResult();
+            ReentrySimulation.Result result = predictor.Result;
             if (result != null)
             {
                 switch (result.outcome)
@@ -170,7 +227,7 @@ namespace MuMech
                         GUILayout.Label("Target difference = " + MuUtils.ToSI(error, 0) + "m"
                                        +"\nMax drag: " + result.maxDragGees.ToString("F1") +"g"
                                        +"\nDelta-v needed: " + result.deltaVExpended.ToString("F1") + "m/s"
-                                       +"\nTime to land: " + GuiUtils.TimeToDHMS(result.endUT - Planetarium.GetUniversalTime(), 1));                        
+                                       +"\nTime to land: " + (vessel.Landed ? "0.0s" : GuiUtils.TimeToDHMS(result.endUT - Planetarium.GetUniversalTime(), 1)));
                         break;
 
                     case ReentrySimulation.Outcome.AEROBRAKED:
@@ -184,7 +241,7 @@ namespace MuMech
 
                     case ReentrySimulation.Outcome.NO_REENTRY:
                         GUILayout.Label("Orbit does not reenter:\n"
-                                      + MuUtils.ToSI(orbit.PeA, 3) + "m Pe > " + MuUtils.ToSI(mainBody.RealMaxAtmosphereAltitude(), 3) + "m atmosphere height");
+                                      + MuUtils.ToSI(orbit.PeA, 3) + "m Pe > " + MuUtils.ToSI(mainBody.RealMaxAtmosphereAltitude(), 3) + (mainBody.atmosphere ? "m atmosphere height" : "m ground"));
                         break;
 
                     case ReentrySimulation.Outcome.TIMED_OUT:
@@ -235,24 +292,29 @@ namespace MuMech
                 }
             }
 
-            // Create a default config file in MJ dir for those ?
-            if (!landingSites.Any(p => p.name == "KSC Pad"))
-                landingSites.Add(new LandingSite()
-                {
-                    name = "KSC Pad",
-                    latitude = -0.09694444,
-                    longitude = -74.5575,
-                    body = Planetarium.fetch.Home
-                });
 
-            if (!landingSites.Any(p => p.name == "VAB"))
-                landingSites.Add(new LandingSite()
-                {
-                    name = "VAB",
-                    latitude = -0.09694444,
-                    longitude = -74.617,
-                    body = Planetarium.fetch.Home
-                });
+            if (GameDatabase.Instance.GetConfigs("REALSOLARSYSTEM").Length == 0)
+            {
+                // Don't add the default site if RSS is present
+                // Create a default config file in MJ dir for those ?
+                if (!landingSites.Any(p => p.name == "KSC Pad"))
+                    landingSites.Add(new LandingSite()
+                    {
+                        name = "KSC Pad",
+                        latitude = -0.09694444,
+                        longitude = -74.5575,
+                        body = Planetarium.fetch.Home
+                    });
+
+                if (!landingSites.Any(p => p.name == "VAB"))
+                    landingSites.Add(new LandingSite()
+                    {
+                        name = "VAB",
+                        latitude = -0.09694444,
+                        longitude = -74.617,
+                        body = Planetarium.fetch.Home
+                    });
+            }
 
             // Import KerbTown/Kerbal-Konstructs launch site
             foreach (var config in GameDatabase.Instance.GetConfigs("STATIC"))
@@ -290,42 +352,47 @@ namespace MuMech
             }
 
             // Import RSS Launch sites
-            UrlDir.UrlConfig rssSites = GameDatabase.Instance.GetConfigs("REALSOLARSYSTEM").FirstOrDefault();
+            UrlDir.UrlConfig rssSites = GameDatabase.Instance.GetConfigs("KSCSWITCHER").FirstOrDefault();
             if (rssSites != null)
             {
-                foreach (ConfigNode site in rssSites.config.GetNode("LaunchSites").GetNodes("Site"))
+                ConfigNode launchSites = rssSites.config.GetNode("LaunchSites");
+                if (launchSites != null)
                 {
-                    string launchSiteName = site.GetValue("displayName");
-                    ConfigNode pqsCity = site.GetNode("PQSCity");
-                    if (pqsCity == null)
+                    foreach (ConfigNode site in launchSites.GetNodes("Site"))
                     {
-                        continue;
-                    }
-
-                    string lat = pqsCity.GetValue("latitude");
-                    string lon = pqsCity.GetValue("longitude");
-
-                    if (launchSiteName == null || lat == null || lon == null)
-                    {
-                        continue;
-                    }
-
-                    double latitude, longitude;
-                    double.TryParse(lat, out latitude);
-                    double.TryParse(lon, out longitude);
-
-                    if (!landingSites.Any(p => p.name == launchSiteName))
-                    {
-                        landingSites.Add(new LandingSite()
+                        string launchSiteName = site.GetValue("displayName");
+                        ConfigNode pqsCity = site.GetNode("PQSCity");
+                        if (pqsCity == null)
                         {
-                            name = launchSiteName,
-                            latitude = latitude,
-                            longitude = longitude,
-                            body = Planetarium.fetch.Home
-                        });
+                            continue;
+                        }
+
+                        string lat = pqsCity.GetValue("latitude");
+                        string lon = pqsCity.GetValue("longitude");
+
+                        if (launchSiteName == null || lat == null || lon == null)
+                        {
+                            continue;
+                        }
+
+                        double latitude, longitude;
+                        double.TryParse(lat, out latitude);
+                        double.TryParse(lon, out longitude);
+
+                        if (!landingSites.Any(p => p.name == launchSiteName))
+                        {
+                            landingSites.Add(new LandingSite()
+                            {
+                                name = launchSiteName,
+                                latitude = latitude,
+                                longitude = longitude,
+                                body = Planetarium.fetch.Home
+                            });
+                        }
                     }
                 }
             }
+
             if (landingSiteIdx > landingSites.Count)
             {
                 landingSiteIdx = 0;

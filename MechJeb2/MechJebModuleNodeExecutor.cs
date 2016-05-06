@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using UnityEngine;
 
 namespace MuMech
 {
@@ -96,7 +93,7 @@ namespace MuMech
             {
                 burnTriggered = false;
 
-                vessel.patchedConicSolver.RemoveManeuverNode(node);
+                node.RemoveSelf();
 
                 if (mode == Mode.ONE_NODE)
                 {
@@ -153,7 +150,7 @@ namespace MuMech
                 {
                     if (core.attitude.attitudeAngleFromTarget() < 90)
                     {
-                        double timeConstant = (dVLeft > 10 ? 0.5 : 2);
+                        double timeConstant = (dVLeft > 10 || vesselState.minThrustAccel > 0.25 * vesselState.maxThrustAccel ? 0.5 : 2);
                         core.thrust.ThrustForDV(dVLeft + tolerance, timeConstant);
                     }
                     else
