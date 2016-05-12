@@ -233,7 +233,7 @@ namespace MuMech
 
         void RegisterInfoItems(object obj)
         {
-            RemotableContainer.Register(obj, vessel.rootPart.flightID.ToString());
+            RemotableContainer.Register(obj, vessel.rootPart.flightID.ToString(), vessel.vesselName);
             foreach (MemberInfo member in obj.GetType().GetMembers(BindingFlags.GetField | BindingFlags.GetProperty | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy))
             {
                 foreach (Attribute attribute in member.GetCustomAttributes(true))

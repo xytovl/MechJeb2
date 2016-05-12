@@ -53,14 +53,17 @@ namespace MuMech
 			return null;
 		}
 
-		public static void Register(object obj, string logicalId)
+		public static void Register(object obj, string logicalId, string logicalIdName = null)
 		{
 			var container = Container;
 			if (container == null)
 				return;
 			try
 			{
-				container.GetType().GetMethod("Register").Invoke(realContainer, new object[] {obj, logicalId});
+				var moreInfo = new Dictionary<string, object>();
+				if (logicalIdName != null)
+					moreInfo["LogicalIdName"] = logicalIdName;
+				container.GetType().GetMethod("Register").Invoke(realContainer, new object[] {obj, logicalId, moreInfo});
 			}
 			catch (Exception e)
 			{
